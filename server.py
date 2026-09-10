@@ -10,6 +10,7 @@ import os
 import select
 import socket
 import time
+from typing import Any, Dict, List, Optional, Text
 
 import six
 
@@ -32,15 +33,15 @@ from protocol import (
 
 class TinyChatServer:
     def __init__(self, host="localhost", port=8765):
-        # type: (six.text_type, int) -> None
+        # type: (Text, int) -> None
         self.host = host
         self.port = port
-        self.server_socket = None  # type: socket.socket
-        self.clients = {}  # type: dict
-        self.message_queues = {ROLE_MASTER: [], ROLE_SLAVE: []}  # type: dict
-        self.log_file = None  # type: file
+        self.server_socket = None  # type: Optional[socket.socket]
+        self.clients = {}  # type: Dict[Text, Dict[str, Any]]
+        self.message_queues = {ROLE_MASTER: [], ROLE_SLAVE: []}  # type: Dict[Text, List[Dict[str, Any]]]
+        self.log_file = None  # type: Optional[Any]
         self.running = False  # type: bool
-        self._unregistered_buffers = {}  # type: dict
+        self._unregistered_buffers = {}  # type: Dict[socket.socket, Text]
 
     def start(self):
         # type: () -> None
@@ -68,8 +69,9 @@ class TinyChatServer:
         # type: () -> None
         """Main event loop using select."""
         assert self.server_socket is not None
-        inputs = [self.server_socket]  # type: list
-        outputs = []  # type: list
+        inputs = []  # type: List[socket.socket]
+        inputs.append(self.server_socket)
+        outputs = []  # type: List[socket.socket]
 
         while self.running:
             try:
@@ -93,7 +95,7 @@ class TinyChatServer:
                 self.handle_exception(s, inputs, outputs)
 
     def handle_new_connection(self, inputs):
-        # type: (list) -> None
+        # type: (List[socket.socket]) -> None
         """Accept a new client connection."""
         assert self.server_socket is not None
         client_socket, addr = self.server_socket.accept()
@@ -106,7 +108,7 @@ class TinyChatServer:
         print("New connection from {}".format(addr))
 
     def handle_client_read(self, client_socket, inputs, outputs):
-        # type: (socket.socket, list, list) -> None
+        # type: (socket.socket, List[socket.socket], List[socket.socket]) -> None
         """Read data from a client."""
         try:
             data = client_socket.recv(4096)
@@ -133,13 +135,13 @@ class TinyChatServer:
         """Handle writable client (not used currently, but kept for completeness)."""
 
     def handle_exception(self, client_socket, inputs, outputs):
-        # type: (socket.socket, list, list) -> None
+        # type: (socket.socket, List[socket.socket], List[socket.socket]) -> None
         """Handle exceptional condition on a socket."""
         print("Exception on socket, disconnecting")
         self.disconnect_client(client_socket, inputs, outputs)
 
     def get_role_by_socket(self, client_socket):
-        # type: (socket.socket) -> six.text_type
+        # type: (socket.socket) -> Optional[Text]
         """Get the role associated with a socket."""
         for role, info in six.iteritems(self.clients):
             if info["socket"] is client_socket:
@@ -147,7 +149,7 @@ class TinyChatServer:
         return None
 
     def buffer_data(self, client_socket, data):
-        # type: (socket.socket, six.binary_type) -> None
+        # type: (socket.socket, bytes) -> None
         """Add data to client's buffer."""
         role = self.get_role_by_socket(client_socket)
         if role:
@@ -201,7 +203,7 @@ class TinyChatServer:
         self._unregistered_buffers[client_socket] = lines[-1]
 
     def process_client_messages(self, role):
-        # type: (six.text_type) -> None
+        # type: (Text) -> None
         """Process complete messages from a registered client's buffer."""
         client = self.clients[role]
         buffer = client["buffer"]
@@ -220,7 +222,7 @@ class TinyChatServer:
                 self.send_to_role(role, make_error("Invalid message: {}".format(e)))
 
     def handle_message(self, from_role, msg):
-        # type: (six.text_type, dict) -> None
+        # type: (Text, Dict[str, Any]) -> None
         """Handle a message from a registered client."""
         msg_type = msg.get("type")
 
@@ -232,7 +234,7 @@ class TinyChatServer:
             self.send_to_role(from_role, make_error("Unknown message type: {}".format(msg_type)))
 
     def handle_send(self, from_role, msg):
-        # type: (six.text_type, dict) -> None
+        # type: (Text, Dict[str, Any]) -> None
         """Handle a send message - queue for the other role."""
         to_role = ROLE_SLAVE if from_role == ROLE_MASTER else ROLE_MASTER
         message = msg.get("message", six.text_type())
@@ -255,13 +257,13 @@ class TinyChatServer:
         self.deliver_queued_messages(to_role)
 
     def handle_await(self, role):
-        # type: (six.text_type) -> None
+        # type: (Text) -> None
         """Handle an await message - mark client as awaiting and deliver queued messages."""
         self.clients[role]["awaiting"] = True
         self.deliver_queued_messages(role)
 
     def deliver_queued_messages(self, role):
-        # type: (six.text_type) -> None
+        # type: (Text) -> None
         """Deliver queued messages to a client if they are awaiting."""
         if role not in self.clients:
             return
@@ -278,13 +280,13 @@ class TinyChatServer:
         self.clients[role]["awaiting"] = False
 
     def send_to_role(self, role, msg):
-        # type: (six.text_type, dict) -> None
+        # type: (Text, Dict[str, Any]) -> None
         """Send a message to a registered client by role."""
         if role in self.clients:
             self.send_raw(self.clients[role]["socket"], msg)
 
     def send_raw(self, sock, msg):
-        # type: (socket.socket, dict) -> None
+        # type: (socket.socket, Dict[str, Any]) -> None
         """Send a raw message to a socket."""
         try:
             sock.sendall(encode_message(msg))
@@ -292,7 +294,7 @@ class TinyChatServer:
             print("Error sending to client: {}".format(e))
 
     def log_message(self, from_role, to_role, message, msg_id):
-        # type: (six.text_type, six.text_type, six.text_type, six.text_type) -> None
+        # type: (Text, Text, Text, Text) -> None
         """Log a message to the log file."""
         if self.log_file:
             direction = "{}->{}".format(from_role, to_role)
@@ -301,7 +303,7 @@ class TinyChatServer:
             self.log_file.flush()
 
     def disconnect_client(self, client_socket, inputs=None, outputs=None):
-        # type: (socket.socket, list, list) -> None
+        # type: (socket.socket, Optional[List[socket.socket]], Optional[List[socket.socket]]) -> None
         """Disconnect a client."""
         role = self.get_role_by_socket(client_socket)
         if role:

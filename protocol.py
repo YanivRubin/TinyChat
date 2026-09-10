@@ -16,21 +16,12 @@ Protocol: JSON lines (newline-delimited JSON) over TCP.
 """
 
 import json
+import socket
 import uuid
 from datetime import datetime
 
 import six
-
-if six.PY3:
-    from typing import TypedDict, Union
-else:
-    # Python 2: TypedDict not available
-    def TypedDict(name, fields):
-        return dict
-    class _Union:
-        def __getitem__(self, items):
-            return tuple(items) if isinstance(items, tuple) else (items,)
-    Union = _Union()
+from typing import Any, Dict, List, Tuple, Union, TypedDict
 
 # Message type constants
 TYPE_REGISTER = "register"

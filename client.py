@@ -12,6 +12,7 @@ import json
 import socket
 import sys
 import time
+from typing import Any, Dict, Optional, Text, Union
 
 import six
 
@@ -31,13 +32,13 @@ from protocol import (
 
 class TinyChatClient:
     def __init__(self, role, host="localhost", port=8765, timeout=5):
-        # type: (six.text_type, six.text_type, int, float) -> None
+        # type: (Text, Text, int, float) -> None
         self.role = role
         self.host = host
         self.port = port
         self.timeout = timeout
-        self.socket = None  # type: socket.socket
-        self.buffer = six.text_type()
+        self.socket = None  # type: Optional[socket.socket]
+        self.buffer = ""  # type: Text
 
     def connect(self):
         # type: () -> bool
@@ -67,13 +68,13 @@ class TinyChatClient:
         return False
 
     def send_raw(self, msg):
-        # type: (dict) -> None
+        # type: (Dict[str, Any]) -> None
         """Send a raw message."""
         assert self.socket is not None
         self.socket.sendall(encode_message(msg))
 
     def receive_message(self):
-        # type: () -> dict
+        # type: () -> Optional[Dict[str, Any]]
         """Try to receive a complete message. Returns dict or None."""
         assert self.socket is not None
         try:
@@ -101,7 +102,7 @@ class TinyChatClient:
         return None
 
     def send_message(self, message):
-        # type: (six.text_type) -> bool
+        # type: (Text) -> bool
         """Send a message and wait for ACK."""
         msg_id = generate_msg_id()
         self.send_raw(make_send(message, msg_id))
@@ -122,7 +123,7 @@ class TinyChatClient:
         return False
 
     def await_message(self):
-        # type: () -> six.text_type
+        # type: () -> Optional[Text]
         """Wait for a message from the other party. Blocks until received."""
         self.send_raw(make_await())
 
