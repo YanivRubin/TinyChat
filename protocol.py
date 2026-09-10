@@ -77,13 +77,8 @@ LogEntry = TypedDict('LogEntry', {
 })
 
 # Union type for all client->server messages
-try:
-    ClientMessage = RegisterMessage | SendMessage | AwaitMessage
-    ServerMessage = RegisteredMessage | DeliveryMessage | AckMessage | ErrorMessage
-except TypeError:
-    # Python 2 or older Python 3: use Union
-    ClientMessage = Union[RegisterMessage, SendMessage, AwaitMessage]
-    ServerMessage = Union[RegisteredMessage, DeliveryMessage, AckMessage, ErrorMessage]
+ClientMessage = Union[RegisterMessage, SendMessage, AwaitMessage]
+ServerMessage = Union[RegisteredMessage, DeliveryMessage, AckMessage, ErrorMessage]
 
 
 def _get_utc_timestamp():
@@ -170,3 +165,4 @@ def encode_log_entry(entry):
     # type: (dict) -> six.binary_type
     """Encode a log entry to JSON line bytes."""
     return (json.dumps(entry) + "\n").encode("utf-8")
+
