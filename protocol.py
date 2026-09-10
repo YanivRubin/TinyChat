@@ -16,9 +16,12 @@ Protocol: JSON lines (newline-delimited JSON) over TCP.
 """
 
 import json
+import socket
 import uuid
-from datetime import datetime, timezone
-from typing import TypedDict
+from datetime import datetime
+
+import six
+from typing import Any, Dict, List, Tuple, Union, TypedDict
 
 # Message type constants
 TYPE_REGISTER = "register"
@@ -74,9 +77,15 @@ LogEntry = TypedDict('LogEntry', {
 })
 
 # Union type for all client->server messages
-ClientMessage = RegisterMessage | SendMessage | AwaitMessage
-# Union type for all server->client messages
-ServerMessage = RegisteredMessage | DeliveryMessage | AckMessage | ErrorMessage
+ClientMessage = Union[RegisterMessage, SendMessage, AwaitMessage]
+ServerMessage = Union[RegisteredMessage, DeliveryMessage, AckMessage, ErrorMessage]
+
+
+def _get_utc_timestamp():
+    # type: () -> str
+    """Get UTC timestamp in ISO format with Z suffix."""
+    # Use utcnow() which works in both Python 2 and 3
+    return datetime.utcnow().isoformat() + "Z"
 
 
 def generate_msg_id():
@@ -86,13 +95,13 @@ def generate_msg_id():
 
 
 def make_register(role):
-    # type: (str) -> dict
+    # type: (six.text_type) -> dict
     """Create a register message."""
     return {"type": TYPE_REGISTER, "role": role}
 
 
 def make_send(message, msg_id=None):
-    # type: (str, str) -> dict
+    # type: (six.text_type, six.text_type) -> dict
     """Create a send message."""
     return {"type": TYPE_SEND, "message": message, "msg_id": msg_id or generate_msg_id()}
 
@@ -104,46 +113,46 @@ def make_await():
 
 
 def make_registered(role):
-    # type: (str) -> dict
+    # type: (six.text_type) -> dict
     """Create a registered response."""
     return {"type": TYPE_REGISTERED, "role": role}
 
 
 def make_message(message, msg_id, from_role):
-    # type: (str, str, str) -> dict
+    # type: (six.text_type, six.text_type, six.text_type) -> dict
     """Create a message delivery."""
     return {"type": TYPE_MESSAGE, "message": message, "msg_id": msg_id, "from": from_role}
 
 
 def make_ack(msg_id):
-    # type: (str) -> dict
+    # type: (six.text_type) -> dict
     """Create an acknowledgment."""
     return {"type": TYPE_ACK, "msg_id": msg_id}
 
 
 def make_error(message):
-    # type: (str) -> dict
+    # type: (six.text_type) -> dict
     """Create an error response."""
     return {"type": TYPE_ERROR, "message": message}
 
 
 def encode_message(msg):
-    # type: (dict) -> bytes
+    # type: (dict) -> six.binary_type
     """Encode a message dict to JSON line bytes."""
     return (json.dumps(msg) + "\n").encode("utf-8")
 
 
 def decode_message(line):
-    # type: (bytes) -> dict
+    # type: (six.binary_type) -> dict
     """Decode a JSON line to message dict."""
     return json.loads(line.decode("utf-8").strip())
 
 
 def make_log_entry(direction, message, msg_id, from_role, to_role):
-    # type: (str, str, str, str, str) -> dict
+    # type: (six.text_type, six.text_type, six.text_type, six.text_type, six.text_type) -> dict
     """Create a log entry dict."""
     return {
-        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "timestamp": _get_utc_timestamp(),
         "direction": direction,  # "master->slave" or "slave->master"
         "message": message,
         "msg_id": msg_id,
@@ -153,6 +162,7 @@ def make_log_entry(direction, message, msg_id, from_role, to_role):
 
 
 def encode_log_entry(entry):
-    # type: (dict) -> bytes
+    # type: (dict) -> six.binary_type
     """Encode a log entry to JSON line bytes."""
     return (json.dumps(entry) + "\n").encode("utf-8")
+

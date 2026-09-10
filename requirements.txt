@@ -1,3 +1,0 @@
-# TinyChat - Minimal Chat Server
-# Python 3 standard library only (no external dependencies)
-# For Python 2 compatibility, would need: six>=1.10

@@ -9,15 +9,7 @@ import subprocess
 import time
 import sys
 
-try:
-    from typing import ClassVar
-except ImportError:
-    # Python 2: ClassVar not available, use a dummy
-    class ClassVar:
-        def __init__(self, typ):
-            pass
-        def __getitem__(self, typ):
-            return self
+import six
 
 import pytest
 
@@ -45,6 +37,16 @@ from protocol import (
     make_send,
 )
 
+# Python 2/3 compatibility for exception types
+if six.PY2:
+    ConnectionError = socket.error
+    BlockingIOError = socket.error
+    TimeoutError = socket.error
+else:
+    ConnectionError = ConnectionError
+    BlockingIOError = BlockingIOError
+    TimeoutError = TimeoutError
+
 # =============================================================================
 # Protocol Tests
 # =============================================================================
@@ -52,7 +54,7 @@ from protocol import (
 def test_generate_msg_id():
     """Test message ID generation."""
     msg_id = generate_msg_id()
-    assert isinstance(msg_id, str)
+    assert isinstance(msg_id, six.string_types)
     assert len(msg_id) == 8
     # Should be unique
     msg_id2 = generate_msg_id()
@@ -152,9 +154,9 @@ class TestIntegration:
 
     SERVER_HOST = "localhost"
     SERVER_PORT = 18765  # Use non-standard port to avoid conflicts
-    SERVER_PROC = None  # type: subprocess.Popen
-    LOG_FILES = []  # type: list
-    _log_files = []  # type: list
+    SERVER_PROC = None
+    LOG_FILES = []
+    _log_files = []
 
     @classmethod
     def setup_class(cls):
@@ -174,7 +176,7 @@ class TestIntegration:
                 s.connect((cls.SERVER_HOST, cls.SERVER_PORT))
                 s.close()
                 break
-            except (ConnectionRefusedError, socket.error):
+            except (ConnectionError, socket.error):
                 time.sleep(0.1)
         else:
             raise RuntimeError("Server failed to start")
@@ -184,7 +186,11 @@ class TestIntegration:
         """Stop server after all tests."""
         if cls.SERVER_PROC:
             cls.SERVER_PROC.terminate()
-            cls.SERVER_PROC.wait(timeout=5)
+            # Python 2: wait() doesn't accept timeout
+            if six.PY2:
+                cls.SERVER_PROC.wait()
+            else:
+                cls.SERVER_PROC.wait(timeout=5)
         # Clean up log files
         for log_file in cls._log_files:
             try:
@@ -223,7 +229,7 @@ class TestIntegration:
     def _recv_message(self, sock):
         """Receive a complete message."""
         sock.settimeout(5)
-        buffer = ""
+        buffer = six.text_type()
         start = time.time()
         while time.time() - start < 5:
             try:
@@ -450,10 +456,13 @@ class TestClientScript:
         """Stop server."""
         if cls.SERVER_PROC:
             cls.SERVER_PROC.terminate()
-            cls.SERVER_PROC.wait(timeout=5)
+            if six.PY2:
+                cls.SERVER_PROC.wait()
+            else:
+                cls.SERVER_PROC.wait(timeout=5)
 
     def run_client(self, role, command, message=None, timeout=10):
-        # type: (str, str, str, int) -> tuple
+        # type: (six.text_type, six.text_type, six.text_type, int) -> tuple
         """Run client.py and return (returncode, stdout, stderr)."""
         cmd = [sys.executable, "client.py", "--host", self.SERVER_HOST, "--port", str(self.SERVER_PORT), role, command]
         if message is not None:
@@ -465,7 +474,11 @@ class TestClientScript:
             universal_newlines=True
         )
         try:
-            stdout, stderr = proc.communicate(timeout=timeout)
+            if six.PY2:
+                # Python 2: communicate() doesn't accept timeout
+                stdout, stderr = proc.communicate()
+            else:
+                stdout, stderr = proc.communicate(timeout=timeout)
             return proc.returncode, stdout.strip(), stderr.strip()
         except subprocess.TimeoutExpired:
             proc.kill()
@@ -488,7 +501,7 @@ class TestClientScript:
         assert ret == 0
 
         # Slave should receive and exit
-        slave_stdout, _ = slave_proc.communicate(timeout=5)
+        slave_stdout, _ = slave_proc.communicate()
         assert slave_proc.returncode == 0
         assert "hello from master" in slave_stdout
 
@@ -505,7 +518,7 @@ class TestClientScript:
         ret, _, _ = self.run_client("slave", "send", "hello from slave")
         assert ret == 0
 
-        slave_stdout, _ = master_proc.communicate(timeout=5)
+        slave_stdout, _ = master_proc.communicate()
         assert master_proc.returncode == 0
         assert "hello from slave" in slave_stdout
 
