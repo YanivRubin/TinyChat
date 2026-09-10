@@ -13,6 +13,8 @@ import socket
 import sys
 import time
 
+import six
+
 from protocol import (
     TYPE_ACK,
     TYPE_ERROR,
@@ -29,13 +31,13 @@ from protocol import (
 
 class TinyChatClient:
     def __init__(self, role, host="localhost", port=8765, timeout=5):
-        # type: (str, str, int, float) -> None
+        # type: (six.text_type, six.text_type, int, float) -> None
         self.role = role
         self.host = host
         self.port = port
         self.timeout = timeout
         self.socket = None  # type: socket.socket
-        self.buffer = ""
+        self.buffer = six.text_type()
 
     def connect(self):
         # type: () -> bool
@@ -54,7 +56,7 @@ class TinyChatClient:
             msg = self.receive_message()
             if msg:
                 if msg.get("type") == TYPE_REGISTERED:
-                    print(f"Connected as {self.role}")
+                    print("Connected as {}".format(self.role))
                     return True
                 elif msg.get("type") == TYPE_ERROR:
                     print("Registration failed: {}".format(msg.get("message")))
@@ -79,7 +81,7 @@ class TinyChatClient:
             if not data:
                 return None
             self.buffer += data.decode("utf-8")
-        except OSError:
+        except (OSError, socket.error):
             # No data available (non-blocking)
             return None
 
@@ -94,12 +96,12 @@ class TinyChatClient:
             try:
                 return decode_message(line.encode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                print(f"Decode error: {e}")
+                print("Decode error: {}".format(e))
                 return None
         return None
 
     def send_message(self, message):
-        # type: (str) -> bool
+        # type: (six.text_type) -> bool
         """Send a message and wait for ACK."""
         msg_id = generate_msg_id()
         self.send_raw(make_send(message, msg_id))
@@ -120,7 +122,7 @@ class TinyChatClient:
         return False
 
     def await_message(self):
-        # type: () -> str
+        # type: () -> six.text_type
         """Wait for a message from the other party. Blocks until received."""
         self.send_raw(make_await())
 

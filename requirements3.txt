@@ -1,0 +1,3 @@
+# Python 3 requirements
+six>=1.10
+pytest>=6.0
